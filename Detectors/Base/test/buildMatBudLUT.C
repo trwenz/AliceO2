@@ -22,12 +22,16 @@
 #include <TSystem.h>
 #include <TStopwatch.h>
 #endif
-
+std::string defaultOutFile = "matbud_parallel.root";
+bool sequential = false;
 o2::base::MatLayerCylSet mbLUT;
 
 bool testMBLUT(const std::string& lutFile = "matbud.root");
-
-bool buildMatBudLUT(int nTst = 60, int maxLr = -1, const std::string& outFile = "matbud.root", const std::string& geomName = "o2sim_geometry-aligned.root");
+bool buildMatBudLUT(int nTst, int maxLr, const std::string& outFile, const std::string& geomNamePrefix, const std::string& opts);
+bool buildMatBudLUT(int nTst = 60, int maxLr = 4, const std::string& outFile = defaultOutFile, const std::string& geomName = "o2sim")
+{
+    return buildMatBudLUT(nTst, maxLr, outFile, geomName, "align-geom.mDetectors=none");
+}
 
 struct LrData {
   float rMin = 0.f;
@@ -55,7 +59,7 @@ bool buildMatBudLUT(int nTst, int maxLr, const std::string& outFile, const std::
   o2::base::GeometryManager::loadGeometry(geomNamePrefix);
   configLayers();
   //harcode max layers to 10 for testing
-  maxLr = 10;
+
   if (maxLr < 1) {
     maxLr = lrData.size();
   } else {
@@ -68,10 +72,14 @@ bool buildMatBudLUT(int nTst, int maxLr, const std::string& outFile, const std::
   }
 
   TStopwatch sw;
-  mbLUT.populateFromTGeo(nTst);
+ if(sequential){
+ mbLUT.populateFromTGeo(nTst);
+ }else{
+ mbLUT.parallelPopulateFromTGeo(nTst);
+ }
   mbLUT.optimizePhiSlices(); // move to populateFromTGeo
   mbLUT.flatten();           // move to populateFromTGeo
-
+// LOG(info) << "Built" << sequential ? "Sequential" : "Parallel" ;
   mbLUT.writeToFile(outFile);
   sw.Stop();
   sw.Print();
@@ -82,7 +90,7 @@ bool buildMatBudLUT(int nTst, int maxLr, const std::string& outFile, const std::
   LOG(info) << "Sequential LUT built, starting build of parallel LUT";
 
   //creation of parallel LUT and timing
-  TStopwatch sw_par;
+ /* TStopwatch sw_par;
   sw_par.Start();
   mbLUT.parallelPopulateFromTGeo(nTst);
   mbLUT.optimizePhiSlices();
@@ -97,7 +105,7 @@ bool buildMatBudLUT(int nTst, int maxLr, const std::string& outFile, const std::
   LOG(info) << "✓ Both serial and parallel LUTs generated successfully";
   LOG(info) << "  Serial LUT: matbud.root";
   LOG(info) << "  Parallel LUT: matbud_par.root";
-
+ */
 
   return true;
 }

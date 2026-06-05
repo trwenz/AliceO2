@@ -160,11 +160,11 @@ void MatLayerCyl::parallelPopulateFromTGeo(int ntrPerCell)
   /// populate layer with info extracted from TGeometry, using ntrPerCell test tracks per cell
   assert(mConstructionMask != Constructed);
   mConstructionMask = InProgress;
-  
- //make sure gGeoManager is closed 
+
+ //make sure gGeoManager is closed
   gGeoManager->CloseGeometry();
  //how many threads to use? lets start with 8
-  gGeoManager->SetMaxThreads(8);
+  gGeoManager->SetMaxThreads(2);
 
   int numThreads = gGeoManager->GetMaxThreads();
 
@@ -207,10 +207,10 @@ void MatLayerCyl::parallelPopulateFromTGeo(int ntrPerCell)
 void MatLayerCyl::parallelPopulateFromTGeo(int ip, int iz, int ntrPerCell, TGeoNavigator* nav)
 {
   /// populate cell with info extracted from TGeometry, using ntrPerCell test tracks per cell
-
+ // TGeoNavigator* cur = !nav ? gGeoManager->GetCurrentNavigator() : nav;
   float zmn = getZBinMin(iz), phmn = getPhiBinMin(ip), sn, cs, rMin = getRMin(), rMax = getRMax();
   double meanRho = 0., meanX2X0 = 0., lgt = 0.;
-  ;
+
   float dz = getDZ() / ntrPerCell;
   for (int isz = ntrPerCell; isz--;) {
     float zs = zmn + (isz + 0.5) * dz;
