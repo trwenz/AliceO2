@@ -74,6 +74,7 @@ class MatLayerCylSet : public o2::gpu::FlatObject
   void print(bool data = false) const;
   void addLayer(float rmin, float rmax, float zmax, float dz, float drphi);
   void populateFromTGeo(int ntrPerCel = 10);
+  void parallelPopulateFromTGeo(int ntrPerCel = 10);
   void optimizePhiSlices(float maxRelDiff = 0.05);
 
   void dumpToTree(const std::string& outName = "matbudTree.root") const;

@@ -1,0 +1,51 @@
+//macro to compare the generated parallel and sequential LUT
+
+#if !defined(__CLING__) || defined(__ROOTCLING__)
+#include "DetectorsBase/MatLayerCylSet.h"
+#include <TSystem.h>
+#endif
+
+bool compareSerialAndParallel(const std::string& serialFile = "matbud.root",  const std::string& parallelFile = "matbud_par.root")
+{
+  // Load both LUTs
+  auto mbr_serial = o2::base::MatLayerCylSet::loadFromFile(serialFile);
+  auto mbr_parallel = o2::base::MatLayerCylSet::loadFromFile(parallelFile);
+
+
+  if (!mbr_serial) {
+    LOG(error) << "Failed to load serial LUT from " << serialFile;
+    return false;
+  }
+  if (!mbr_parallel) {
+    LOG(error) << "Failed to load parallel LUT from " << parallelFile;
+    return false;
+  }
+
+  LOG(info) << "Loaded serial LUT from: " << serialFile;
+  LOG(info) << "Loaded parallel LUT from: " << parallelFile;
+
+  // Dump both to text files for detailed comparison
+  LOG(info) << "Dumping LUTs to text files...";
+  gSystem->RedirectOutput("matbudSerial.txt", "w");
+  mbr_serial->print(true);
+  gSystem->RedirectOutput(nullptr);
+
+  gSystem->RedirectOutput("matbudParallel.txt", "w");
+  mbr_parallel->print(true);
+  gSystem->RedirectOutput(nullptr);
+
+  LOG(info) << "Text dumps created: matbudSerial.txt and matbudParallel.txt";
+
+  // Compare using diff
+  LOG(info) << "Running diff comparison...";
+  int diff_result = gSystem->Exec("diff matbudSerial.txt matbudParallel.txt > /dev/null 2>&1"); //redirect standart output to keep console clean, care about result code only anyway
+
+  if (diff_result == 0) {
+    LOG(info) << "✓ SUCCESS: Serial and parallel implementations produce identical LUTs";
+    return true;
+  } else {
+    LOG(error) << "✗ FAILURE: Differences found between serial and parallel implementations";
+    LOG(error) << "Run 'diff -u matbudSerial.txt matbudParallel.txt' to see details";
+    return false;
+  }
+}

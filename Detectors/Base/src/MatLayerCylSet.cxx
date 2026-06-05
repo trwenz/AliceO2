@@ -90,6 +90,29 @@ void MatLayerCylSet::populateFromTGeo(int ntrPerCell)
   }
   finalizeStructures();
 }
+//_______________________________________________________________________________
+
+void MatLayerCylSet::parallelPopulateFromTGeo(int ntrPerCell)
+{
+   ///< populate layers, using ntrPerCell test tracks per cell
+  assert(mConstructionMask == InProgress);
+
+  int nlr = getNLayers();
+  if (!nlr) {
+    LOG(error) << "The LUT is not yet initialized";
+    return;
+  }
+  if (get()->mR2Intervals) {
+    LOG(error) << "The LUT is already populated";
+    return;
+  }
+  for (int i = 0; i < nlr; i++) {
+    printf("Populating with %d trials Lr  %3d ", ntrPerCell, i);
+    get()->mLayers[i].print();
+    get()->mLayers[i].parallelPopulateFromTGeo(ntrPerCell);
+  }
+  finalizeStructures();
+}
 
 //________________________________________________________________________________
 void MatLayerCylSet::finalizeStructures()

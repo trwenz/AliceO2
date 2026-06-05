@@ -29,7 +29,7 @@
 #include <mutex>
 class TGeoHMatrix; // lines 11-11
 class TGeoManager; // lines 9-9
-
+class TGeoNavigator;
 namespace o2
 {
 namespace detectors
@@ -105,7 +105,17 @@ class GeometryManager : public TObject
   {
     return meanMaterialBudget(start.X(), start.Y(), start.Z(), end.X(), end.Y(), end.Z());
   }
-
+ //parallel implementations of meanMaterialBudget
+  static o2::base::MatBudget parallelMeanMaterialBudget(float x0, float y0, float z0, float x1, float y1, float z1, TGeoNavigator* nav);
+  static o2::base::MatBudget parallelMeanMaterialBudget(const math_utils::Point3D<float>& start, const math_utils::Point3D<float>& end, TGeoNavigator* nav)
+  {
+    return parallelMeanMaterialBudget(start.X(), start.Y(), start.Z(), end.X(), end.Y(), end.Z(), nav);
+  }
+  static o2::base::MatBudget parallelMeanMaterialBudget(const math_utils::Point3D<double>& start, const math_utils::Point3D<double>& end, TGeoNavigator* nav)
+  {
+    return parallelMeanMaterialBudget(start.X(), start.Y(), start.Z(), end.X(), end.Y(), end.Z(), nav);
+  }
+//working code starts here again
   static MatBudgetExt meanMaterialBudgetExt(float x0, float y0, float z0, float x1, float y1, float z1);
   static MatBudgetExt meanMaterialBudgetExt(const math_utils::Point3D<float>& start, const math_utils::Point3D<float>& end)
   {

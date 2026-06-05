@@ -485,7 +485,115 @@ o2::base::MatBudget GeometryManager::meanMaterialBudget(float x0, float y0, floa
   budTotal.length = stepTot;
   return o2::base::MatBudget(budTotal);
 }
+//________________________________
+//parallel attemot at meanMaterialBudget calculation
+o2::base::MatBudget GeometryManager::parallelMeanMaterialBudget(float x0, float y0, float z0, float x1, float y1, float z1, TGeoNavigator* nav = nullptr )
+{
+  //
+  // Calculate mean material budget and material properties between
+  //    the points "0" and "1".
+  //
+  //  see MatBudget data members for provided information
+  //
+  //  Origin:  Marian Ivanov, Marian.Ivanov@cern.ch
+  //
+  //  Corrections and improvements by
+  //        Andrea Dainese, Andrea.Dainese@lnl.infn.it,
+  //        Andrei Gheata,  Andrei.Gheata@cern.ch
+  //
+  //  Ported to O2: ruben.shahoyan@cern.ch
+  //  Attempt at Parallelization: Tristan Wenzel
 
+  double length, startD[3] = {x0, y0, z0};
+  double dir[3] = {x1 - x0, y1 - y0, z1 - z0};
+  if ((length = dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]) < TGeoShape::Tolerance() * TGeoShape::Tolerance()) {
+    return o2::base::MatBudget(); // return empty struct
+  }
+  length = TMath::Sqrt(length);
+  double invlen = 1. / length;
+  for (int i = 3; i--;) {
+    dir[i] *= invlen;
+  }
+  //we can just take out the guard since the whole thing is already thread safe
+  //std::lock_guard<std::mutex> guard(sTGMutex);
+  // Initialize start point and direction
+  TGeoNode* currentnode = nullptr;
+  if(nav){
+    currentnode = nav->InitTrack(startD, dir);
+  }else{
+    currentnode = gGeoManager->InitTrack(startD, dir);
+  }
+
+  if (!currentnode) {
+    LOG(error) << "start point out of geometry: " << x0 << ':' << y0 << ':' << z0;
+    return o2::base::MatBudget(); // return empty struct
+  }
+
+  o2::base::MatBudget budTotal, budStep;
+  accountMaterial(currentnode->GetVolume()->GetMedium()->GetMaterial(), budStep);
+  budStep.length = length;
+
+  // Locate next boundary within length without computing safety.
+  // Propagate either with length (if no boundary found) or just cross boundary
+  if(nav){
+    nav->FindNextBoundaryAndStep(length, kFALSE);
+  }else{
+    gGeoManager->FindNextBoundaryAndStep(length, kFALSE);
+  }
+
+  Double_t stepTot = 0.0; // Step made
+  Double_t step = nav ? nav->GetStep() : gGeoManager->GetStep();
+
+  // If no boundary within proposed length, return current step data
+
+  bool boundary = nav ? nav->IsOnBoundary() : gGeoManager->IsOnBoundary();
+  if (!boundary) {
+    budStep.meanX2X0 = budStep.length / budStep.meanX2X0;
+    return o2::base::MatBudget(budStep);
+  }
+  // Try to cross the boundary and see what is next
+  Int_t nzero = 0;
+  while (length > TGeoShape::Tolerance()) {
+    if (step < 2. * TGeoShape::Tolerance()) {
+      nzero++;
+    } else {
+      nzero = 0;
+    }
+    if (nzero > 3) {
+      // This means navigation has problems on one boundary
+      // Try to cross by making a small step
+      const double* curPos = nav ? nav->GetCurrentPoint() : gGeoManager->GetCurrentPoint();
+      LOG(warning) << "Cannot cross boundary at (" << curPos[0] << ',' << curPos[1] << ',' << curPos[2] << ')';
+      budTotal.meanRho /= stepTot;
+      budTotal.length = stepTot;
+      return o2::base::MatBudget(budTotal);
+    }
+    stepTot += step;
+
+    budTotal.meanRho += step * budStep.meanRho;
+    budTotal.meanX2X0 += step / budStep.meanX2X0;
+
+    if (step >= length) {
+      break;
+    }
+    currentnode = nav? nav->GetCurrentNode() : gGeoManager->GetCurrentNode();
+    if (!currentnode) {
+      break;
+    }
+    length -= step;
+    accountMaterial(currentnode->GetVolume()->GetMedium()->GetMaterial(), budStep);
+    if(nav){
+      nav->FindNextBoundaryAndStep(length, kFALSE);
+    }else{
+    gGeoManager->FindNextBoundaryAndStep(length, kFALSE);
+    }
+
+    step = nav ? nav->GetStep() : gGeoManager->GetStep();
+  }
+  budTotal.meanRho /= stepTot;
+  budTotal.length = stepTot;
+  return o2::base::MatBudget(budTotal);
+}
 //_________________________________
 void GeometryManager::applyMisalignent(bool applyMisalignment)
 {

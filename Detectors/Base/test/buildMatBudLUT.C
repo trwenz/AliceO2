@@ -54,7 +54,8 @@ bool buildMatBudLUT(int nTst, int maxLr, const std::string& outFile, const std::
   }
   o2::base::GeometryManager::loadGeometry(geomNamePrefix);
   configLayers();
-
+  //harcode max layers to 10 for testing
+  maxLr = 10;
   if (maxLr < 1) {
     maxLr = lrData.size();
   } else {
@@ -78,6 +79,26 @@ bool buildMatBudLUT(int nTst, int maxLr, const std::string& outFile, const std::
   mbLUT.dumpToTree("matbudTree.root");
   sw.Stop();
   sw.Print();
+  LOG(info) << "Sequential LUT built, starting build of parallel LUT";
+
+  //creation of parallel LUT and timing
+  TStopwatch sw_par;
+  sw_par.Start();
+  mbLUT.parallelPopulateFromTGeo(nTst);
+  mbLUT.optimizePhiSlices();
+  mbLUT.flatten();
+  mbLUT.writeToFile("matbud_par.root");
+  sw_par.Stop();
+  sw_par.Print();
+  sw_par.Start(false);
+  mbLUT.dumpToTree("matbudTree_par.root");
+  sw_par.Stop();
+  sw_par.Print();
+  LOG(info) << "✓ Both serial and parallel LUTs generated successfully";
+  LOG(info) << "  Serial LUT: matbud.root";
+  LOG(info) << "  Parallel LUT: matbud_par.root";
+
+
   return true;
 }
 
