@@ -514,15 +514,18 @@ o2::base::MatBudget GeometryManager::parallelMeanMaterialBudget(float x0, float 
   for (int i = 3; i--;) {
     dir[i] *= invlen;
   }
-  //we can just take out the guard since the whole thing is already thread safe
-  //std::lock_guard<std::mutex> guard(sTGMutex);
-  // Initialize start point and direction
-  TGeoNode* currentnode = nullptr;
-  if(nav){
-    currentnode = nav->InitTrack(startD, dir);
-  }else{
-    currentnode = gGeoManager->InitTrack(startD, dir);
+  //check multithreaded state, if single threaded lock mutex like in old version
+  std::unique_lock<std::mutex> guard(sTGMutex, std::defer_lock);
+  if(gGeoManager->GetMaxThreads() <= 1){
+    guard.lock();
   }
+
+  // Initialize start point and direction
+
+  // nav either holds the navigator for the thread we currently have or the default navigator invoked by the gGeomanager->doSomething() calls 
+  //that are currently in the implementation
+  TGeoNode* currentnode = nav->InitTrack(startD, dir);
+ 
 
   if (!currentnode) {
     LOG(error) << "start point out of geometry: " << x0 << ':' << y0 << ':' << z0;
@@ -535,18 +538,16 @@ o2::base::MatBudget GeometryManager::parallelMeanMaterialBudget(float x0, float 
 
   // Locate next boundary within length without computing safety.
   // Propagate either with length (if no boundary found) or just cross boundary
-  if(nav){
-    nav->FindNextBoundaryAndStep(length, kFALSE);
-  }else{
-    gGeoManager->FindNextBoundaryAndStep(length, kFALSE);
-  }
+  
+  nav->FindNextBoundaryAndStep(length, kFALSE);
+ 
 
   Double_t stepTot = 0.0; // Step made
-  Double_t step = nav ? nav->GetStep() : gGeoManager->GetStep();
+  Double_t step = nav->GetStep();
 
   // If no boundary within proposed length, return current step data
 
-  bool boundary = nav ? nav->IsOnBoundary() : gGeoManager->IsOnBoundary();
+  bool boundary = nav->IsOnBoundary();
   if (!boundary) {
     budStep.meanX2X0 = budStep.length / budStep.meanX2X0;
     return o2::base::MatBudget(budStep);
@@ -562,7 +563,7 @@ o2::base::MatBudget GeometryManager::parallelMeanMaterialBudget(float x0, float 
     if (nzero > 3) {
       // This means navigation has problems on one boundary
       // Try to cross by making a small step
-      const double* curPos = nav ? nav->GetCurrentPoint() : gGeoManager->GetCurrentPoint();
+      const double* curPos = nav->GetCurrentPoint();
       LOG(warning) << "Cannot cross boundary at (" << curPos[0] << ',' << curPos[1] << ',' << curPos[2] << ')';
       budTotal.meanRho /= stepTot;
       budTotal.length = stepTot;
@@ -576,19 +577,14 @@ o2::base::MatBudget GeometryManager::parallelMeanMaterialBudget(float x0, float 
     if (step >= length) {
       break;
     }
-    currentnode = nav? nav->GetCurrentNode() : gGeoManager->GetCurrentNode();
+    currentnode = nav->GetCurrentNode();
     if (!currentnode) {
       break;
     }
     length -= step;
     accountMaterial(currentnode->GetVolume()->GetMedium()->GetMaterial(), budStep);
-    if(nav){
-      nav->FindNextBoundaryAndStep(length, kFALSE);
-    }else{
-    gGeoManager->FindNextBoundaryAndStep(length, kFALSE);
-    }
-
-    step = nav ? nav->GetStep() : gGeoManager->GetStep();
+    nav->FindNextBoundaryAndStep(length, kFALSE);
+    step = nav->GetStep();
   }
   budTotal.meanRho /= stepTot;
   budTotal.length = stepTot;

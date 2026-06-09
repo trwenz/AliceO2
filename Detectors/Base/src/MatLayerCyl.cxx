@@ -96,10 +96,10 @@ void MatLayerCyl::initSegmentation(float rMin, float rMax, float zHalfSpan, int 
   offs = alignSize(offs + nphi * sizeof(short), getBufferAlignmentBytes()); // account for alignment
 
   o2::gpu::FlatObject::resizeArray(mSliceCos, 0, nphi, reinterpret_cast<float*>(mFlatBufferPtr + offs)); // in the beginning nslice = nphi
-  offs = alignSize(offs + nphi * sizeof(float), getBufferAlignmentBytes());                  // account for alignment
+  offs = alignSize(offs + nphi * sizeof(float), getBufferAlignmentBytes());                              // account for alignment
 
   o2::gpu::FlatObject::resizeArray(mSliceSin, 0, nphi, reinterpret_cast<float*>(mFlatBufferPtr + offs)); // in the beginning nslice = nphi
-  offs = alignSize(offs + nphi * sizeof(float), getBufferAlignmentBytes());                  // account for alignment
+  offs = alignSize(offs + nphi * sizeof(float), getBufferAlignmentBytes());                              // account for alignment
 
   for (int i = nphi; i--;) {
     mSliceCos[i] = o2::math_utils::cos(getPhiBinMin(i));
@@ -155,51 +155,48 @@ void MatLayerCyl::populateFromTGeo(int ip, int iz, int ntrPerCell)
 }
 //_______________________________________________________________________________
 //________________________________________________________________________________
-void MatLayerCyl::parallelPopulateFromTGeo(int ntrPerCell)
+void MatLayerCyl::parallelPopulateFromTGeo(int ntrPerCell, int nThreads)
 {
   /// populate layer with info extracted from TGeometry, using ntrPerCell test tracks per cell
   assert(mConstructionMask != Constructed);
   mConstructionMask = InProgress;
-
- //make sure gGeoManager is closed
-  gGeoManager->CloseGeometry();
- //how many threads to use? lets start with 8
-  gGeoManager->SetMaxThreads(2);
-
-  int numThreads = gGeoManager->GetMaxThreads();
-
   ntrPerCell = ntrPerCell > 1 ? ntrPerCell : 1;
-  if(numThreads <= 1){
-   for (int iz = getNZBins(); iz--;) {
+
+  if (nThreads <= 1) {
+    TGeoNavigator* nav = gGeoManager->GetCurrentNavigator(); // get the default navigator, used in the singlethreaded case
+    for (int iz = getNZBins(); iz--;) {
       for (int ip = getNPhiBins(); ip--;) {
-        populateFromTGeo(ip, iz, ntrPerCell);
+        parallelPopulateFromTGeo(ip, iz, ntrPerCell, nav);
       }
     }
-   return;
+    return;
   }
 
+  /// set the amount of querried max threads in the geoManager, enables thread safety
+  gGeoManager->SetMaxThreads(nThreads);
+
   std::vector<std::thread> threads;
-  threads.reserve(numThreads);
+  threads.reserve(nThreads);
   int totalZ = getNZBins();
   int totalPhi = getNPhiBins();
   int totalTasks = totalZ * totalPhi;
 
-  for(int t = 0; t < numThreads ; ++t){
-     //create each thread with a lambda, that makes him handle a certain portion of the cells
-     threads.emplace_back([this, t, numThreads, totalTasks, totalPhi, ntrPerCell]() {
-	auto* nav = gGeoManager->AddNavigator();
+  for (int t = 0; t < nThreads; ++t) {
+    // create each thread with a lambda, that assigns him a portion of the cells to handle
+    threads.emplace_back([this, t, nThreads, totalTasks, totalPhi, ntrPerCell]() {
+      auto* nav = gGeoManager->AddNavigator();
 
-	for(int i = t; i < totalTasks; i += numThreads){
-	   int iz = i / totalPhi;
-	   int ip = i % totalPhi;
-	   this->parallelPopulateFromTGeo(ip, iz, ntrPerCell, nav);
-	}
-     });
+      for (int i = t; i < totalTasks; i += nThreads) {
+        int iz = i / totalPhi;
+        int ip = i % totalPhi;
+        this->parallelPopulateFromTGeo(ip, iz, ntrPerCell, nav);
+      }
+    });
   }
-  for(auto  &th : threads) {
-     if(th.joinable()){
-	th.join();
-     }
+  for (auto& th : threads) {
+    if (th.joinable()) {
+      th.join();
+    }
   }
 }
 
@@ -207,7 +204,10 @@ void MatLayerCyl::parallelPopulateFromTGeo(int ntrPerCell)
 void MatLayerCyl::parallelPopulateFromTGeo(int ip, int iz, int ntrPerCell, TGeoNavigator* nav)
 {
   /// populate cell with info extracted from TGeometry, using ntrPerCell test tracks per cell
- // TGeoNavigator* cur = !nav ? gGeoManager->GetCurrentNavigator() : nav;
+
+  /// get the current navigator. If we are excecuting singlethreaded nav is null so we set curr to the default navigator
+  // TGeoNavigator* curr = nav ? nav : gGeoManager->GetCurrentNavigator();
+
   float zmn = getZBinMin(iz), phmn = getPhiBinMin(ip), sn, cs, rMin = getRMin(), rMax = getRMax();
   double meanRho = 0., meanX2X0 = 0., lgt = 0.;
 
@@ -231,7 +231,6 @@ void MatLayerCyl::parallelPopulateFromTGeo(int ip, int iz, int ntrPerCell, TGeoN
     cell.meanX2X0 = meanX2X0 / lgt; // mean 1./X0 seen in this cell
   }
 }
-
 
 //________________________________________________________________________________
 bool MatLayerCyl::canMergePhiSlices(int i, int j, float maxRelDiff, int maxDifferent) const

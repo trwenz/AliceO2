@@ -22,15 +22,14 @@
 #include <TSystem.h>
 #include <TStopwatch.h>
 #endif
-std::string defaultOutFile = "matbud_parallel.root";
-bool sequential = false;
+std::string defaultOutFile = "20Layers1core.root";
 o2::base::MatLayerCylSet mbLUT;
 
 bool testMBLUT(const std::string& lutFile = "matbud.root");
 bool buildMatBudLUT(int nTst, int maxLr, const std::string& outFile, const std::string& geomNamePrefix, const std::string& opts);
-bool buildMatBudLUT(int nTst = 60, int maxLr = 4, const std::string& outFile = defaultOutFile, const std::string& geomName = "o2sim")
+bool buildMatBudLUT(int nTst = 60, int maxLr = 20, const std::string& outFile = defaultOutFile, const std::string& geomName = "o2sim")
 {
-    return buildMatBudLUT(nTst, maxLr, outFile, geomName, "align-geom.mDetectors=none");
+  return buildMatBudLUT(nTst, maxLr, outFile, geomName, "align-geom.mDetectors=none");
 }
 
 struct LrData {
@@ -58,7 +57,6 @@ bool buildMatBudLUT(int nTst, int maxLr, const std::string& outFile, const std::
   }
   o2::base::GeometryManager::loadGeometry(geomNamePrefix);
   configLayers();
-  //harcode max layers to 10 for testing
 
   if (maxLr < 1) {
     maxLr = lrData.size();
@@ -70,16 +68,21 @@ bool buildMatBudLUT(int nTst, int maxLr, const std::string& outFile, const std::
     printf("L:%3d %6.2f<R<%6.2f ZH=%5.1f | dz = %6.2f drph = %6.2f\n", i, l.rMin, l.rMax, l.zHalf, l.dZMin, l.dRPhiMin);
     mbLUT.addLayer(l.rMin, l.rMax, l.zHalf, l.dZMin, l.dRPhiMin);
   }
+  // per default the implementation is sequential, to run in parallel set the environment variable MATBUD_SEQUENTIAL to 0
+  bool sequential = true;
+  auto sequential_env = getenv("MATBUD_SEQUENTIAL");
+  if (sequential_env) {
+    sequential = atoi(sequential_env);
+  }
 
   TStopwatch sw;
- if(sequential){
- mbLUT.populateFromTGeo(nTst);
- }else{
- mbLUT.parallelPopulateFromTGeo(nTst);
- }
+  if (sequential) {
+    mbLUT.populateFromTGeo(nTst);
+  } else {
+    mbLUT.parallelPopulateFromTGeo(nTst);
+  }
   mbLUT.optimizePhiSlices(); // move to populateFromTGeo
   mbLUT.flatten();           // move to populateFromTGeo
-// LOG(info) << "Built" << sequential ? "Sequential" : "Parallel" ;
   mbLUT.writeToFile(outFile);
   sw.Stop();
   sw.Print();
@@ -87,25 +90,7 @@ bool buildMatBudLUT(int nTst, int maxLr, const std::string& outFile, const std::
   mbLUT.dumpToTree("matbudTree.root");
   sw.Stop();
   sw.Print();
-  LOG(info) << "Sequential LUT built, starting build of parallel LUT";
-
-  //creation of parallel LUT and timing
- /* TStopwatch sw_par;
-  sw_par.Start();
-  mbLUT.parallelPopulateFromTGeo(nTst);
-  mbLUT.optimizePhiSlices();
-  mbLUT.flatten();
-  mbLUT.writeToFile("matbud_par.root");
-  sw_par.Stop();
-  sw_par.Print();
-  sw_par.Start(false);
-  mbLUT.dumpToTree("matbudTree_par.root");
-  sw_par.Stop();
-  sw_par.Print();
-  LOG(info) << "✓ Both serial and parallel LUTs generated successfully";
-  LOG(info) << "  Serial LUT: matbud.root";
-  LOG(info) << "  Parallel LUT: matbud_par.root";
- */
+  LOG(info) << "LUT built";
 
   return true;
 }

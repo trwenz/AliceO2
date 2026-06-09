@@ -13,7 +13,7 @@
 
 #include "DetectorsBase/MatLayerCylSet.h"
 #include "CommonConstants/MathConstants.h"
-
+#include <thread>
 #ifndef GPUCA_ALIGPUCODE // this part is unvisible on GPU version
 #include "GPUCommonLogger.h"
 #include <TFile.h>
@@ -106,10 +106,16 @@ void MatLayerCylSet::parallelPopulateFromTGeo(int ntrPerCell)
     LOG(error) << "The LUT is already populated";
     return;
   }
+  int nThreads = static_cast<int>(std::thread::hardware_concurrency());
+  auto nthreads_env = getenv("NTHREADS_MATBUD");
+  if (nthreads_env) {
+    nThreads = atoi(nthreads_env);
+  }
+     
   for (int i = 0; i < nlr; i++) {
     printf("Populating with %d trials Lr  %3d ", ntrPerCell, i);
     get()->mLayers[i].print();
-    get()->mLayers[i].parallelPopulateFromTGeo(ntrPerCell);
+    get()->mLayers[i].parallelPopulateFromTGeo(ntrPerCell, nThreads);
   }
   finalizeStructures();
 }

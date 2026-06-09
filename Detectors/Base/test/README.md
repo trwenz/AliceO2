@@ -13,6 +13,13 @@ root -b -q O2/Detectors/Base/test/buildMatBudLUT.C+
 
 The generation is quite time consuming (may take ~30 min).
 
+You can speed it up considerably by allowing the process to use multiple cores
+To do so specify that you want to run in parallel and how many cores you want to provide by setting the environment variables
+```
+export MATBUD_SEQUENTIAL="0"
+export NTHREADS_MATBUD="#number of cores you wish to provide"
+```
+
 The optimized LUT will be stored in the matbud.root file.
 
 Load it as:

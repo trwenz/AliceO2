@@ -5,7 +5,7 @@
 #include <TSystem.h>
 #endif
 
-bool compareSerAndPar(const std::string& serialFile = "matbud.root",  const std::string& parallelFile = "matbud_parallel.root")
+bool compareSerAndPar(const std::string& serialFile = "20Layers1core.root",  const std::string& parallelFile = "OldSerialImplemen.root")
 {
   // Load both LUTs
   auto mbr_serial = o2::base::MatLayerCylSet::loadFromFile(serialFile);
