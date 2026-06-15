@@ -23,8 +23,6 @@
 #include <TStopwatch.h>
 #endif
 
-<<<<<<< HEAD
->>>>>>> 803e6264dc (Clean up parallel TBB implementation, remove redundant code)
 o2::base::MatLayerCylSet mbLUT;
 
 bool testMBLUT(const std::string& lutFile = "matbud.root");
