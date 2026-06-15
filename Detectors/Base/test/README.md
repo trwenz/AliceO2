@@ -11,12 +11,11 @@ To generate the LUT (at the moment for R<400, with layers above 270 cm not optim
 root -b -q O2/Detectors/Base/test/buildMatBudLUT.C+
 ```
 
-The generation is quite time consuming (may take ~30 min).
+The generation is quite time consuming (may take mutiple hours).
 
 You can speed it up considerably by allowing the process to use multiple cores
-To do so specify that you want to run in parallel and how many cores you want to provide by setting the environment variables
+To do so specify that the number of Cores you want to use by setting the environment variable
 ```
-export MATBUD_SEQUENTIAL="0"
 export NTHREADS_MATBUD="#number of cores you wish to provide"
 ```
 

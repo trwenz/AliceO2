@@ -96,26 +96,15 @@ class GeometryManager : public TObject
     ClassDefNV(MatBudgetExt, 1);
   };
 
-  static o2::base::MatBudget meanMaterialBudget(float x0, float y0, float z0, float x1, float y1, float z1);
-  static o2::base::MatBudget meanMaterialBudget(const math_utils::Point3D<float>& start, const math_utils::Point3D<float>& end)
+  static o2::base::MatBudget meanMaterialBudget(float x0, float y0, float z0, float x1, float y1, float z1, TGeoNavigator* nav = nullptr);
+  static o2::base::MatBudget meanMaterialBudget(const math_utils::Point3D<float>& start, const math_utils::Point3D<float>& end, TGeoNavigator* nav = nullptr)
   {
-    return meanMaterialBudget(start.X(), start.Y(), start.Z(), end.X(), end.Y(), end.Z());
+    return meanMaterialBudget(start.X(), start.Y(), start.Z(), end.X(), end.Y(), end.Z(), nav);
   }
-  static o2::base::MatBudget meanMaterialBudget(const math_utils::Point3D<double>& start, const math_utils::Point3D<double>& end)
+  static o2::base::MatBudget meanMaterialBudget(const math_utils::Point3D<double>& start, const math_utils::Point3D<double>& end, TGeoNavigator* nav = nullptr)
   {
-    return meanMaterialBudget(start.X(), start.Y(), start.Z(), end.X(), end.Y(), end.Z());
+    return meanMaterialBudget(start.X(), start.Y(), start.Z(), end.X(), end.Y(), end.Z(), nav);
   }
- //parallel implementations of meanMaterialBudget
-  static o2::base::MatBudget parallelMeanMaterialBudget(float x0, float y0, float z0, float x1, float y1, float z1, TGeoNavigator* nav);
-  static o2::base::MatBudget parallelMeanMaterialBudget(const math_utils::Point3D<float>& start, const math_utils::Point3D<float>& end, TGeoNavigator* nav)
-  {
-    return parallelMeanMaterialBudget(start.X(), start.Y(), start.Z(), end.X(), end.Y(), end.Z(), nav);
-  }
-  static o2::base::MatBudget parallelMeanMaterialBudget(const math_utils::Point3D<double>& start, const math_utils::Point3D<double>& end, TGeoNavigator* nav)
-  {
-    return parallelMeanMaterialBudget(start.X(), start.Y(), start.Z(), end.X(), end.Y(), end.Z(), nav);
-  }
-//working code starts here again
   static MatBudgetExt meanMaterialBudgetExt(float x0, float y0, float z0, float x1, float y1, float z1);
   static MatBudgetExt meanMaterialBudgetExt(const math_utils::Point3D<float>& start, const math_utils::Point3D<float>& end)
   {

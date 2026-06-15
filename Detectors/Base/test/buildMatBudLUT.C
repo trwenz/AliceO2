@@ -22,12 +22,13 @@
 #include <TSystem.h>
 #include <TStopwatch.h>
 #endif
-std::string defaultOutFile = "20Layers1core.root";
+
+
 o2::base::MatLayerCylSet mbLUT;
 
 bool testMBLUT(const std::string& lutFile = "matbud.root");
 bool buildMatBudLUT(int nTst, int maxLr, const std::string& outFile, const std::string& geomNamePrefix, const std::string& opts);
-bool buildMatBudLUT(int nTst = 60, int maxLr = 20, const std::string& outFile = defaultOutFile, const std::string& geomName = "o2sim")
+bool buildMatBudLUT(int nTst = 60, int maxLr = 20, const std::string& outFile = "matbud.root", const std::string& geomName = "o2sim")
 {
   return buildMatBudLUT(nTst, maxLr, outFile, geomName, "align-geom.mDetectors=none");
 }
@@ -68,19 +69,9 @@ bool buildMatBudLUT(int nTst, int maxLr, const std::string& outFile, const std::
     printf("L:%3d %6.2f<R<%6.2f ZH=%5.1f | dz = %6.2f drph = %6.2f\n", i, l.rMin, l.rMax, l.zHalf, l.dZMin, l.dRPhiMin);
     mbLUT.addLayer(l.rMin, l.rMax, l.zHalf, l.dZMin, l.dRPhiMin);
   }
-  // per default the implementation is sequential, to run in parallel set the environment variable MATBUD_SEQUENTIAL to 0
-  bool sequential = true;
-  auto sequential_env = getenv("MATBUD_SEQUENTIAL");
-  if (sequential_env) {
-    sequential = atoi(sequential_env);
-  }
 
   TStopwatch sw;
-  if (sequential) {
-    mbLUT.populateFromTGeo(nTst);
-  } else {
-    mbLUT.parallelPopulateFromTGeo(nTst);
-  }
+  mbLUT.populateFromTGeo(nTst);
   mbLUT.optimizePhiSlices(); // move to populateFromTGeo
   mbLUT.flatten();           // move to populateFromTGeo
   mbLUT.writeToFile(outFile);

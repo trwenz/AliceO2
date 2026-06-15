@@ -67,9 +67,7 @@ class MatLayerCyl : public o2::gpu::FlatObject
   void initSegmentation(float rMin, float rMax, float zHalfSpan, int nz, int nphi);
   void initSegmentation(float rMin, float rMax, float zHalfSpan, float dzMin, float drphiMin);
   void populateFromTGeo(int ntrPerCell = 10);
-  void populateFromTGeo(int ip, int iz, int ntrPerCell);
-  void parallelPopulateFromTGeo(int ntrPerCell = 10, int nThreads = 1);
-  void parallelPopulateFromTGeo(int ip, int iz, int ntrPerCell, TGeoNavigator* nav = nullptr);
+  void populateFromTGeo(int ip, int iz, int ntrPerCell, TGeoNavigator* nav = nullptr);
   void print(bool data = false) const;
 #endif // !GPUCA_ALIGPUCODE
 

@@ -118,95 +118,19 @@ void MatLayerCyl::populateFromTGeo(int ntrPerCell)
   assert(mConstructionMask != Constructed);
   mConstructionMask = InProgress;
   ntrPerCell = ntrPerCell > 1 ? ntrPerCell : 1;
+  TGeoNavigator* nav = gGeoManager->GetCurrentNavigator();
   for (int iz = getNZBins(); iz--;) {
     for (int ip = getNPhiBins(); ip--;) {
-      populateFromTGeo(ip, iz, ntrPerCell);
+      populateFromTGeo(ip, iz, ntrPerCell, nav);
     }
   }
 }
 
+
 //________________________________________________________________________________
-void MatLayerCyl::populateFromTGeo(int ip, int iz, int ntrPerCell)
+void MatLayerCyl::populateFromTGeo(int ip, int iz, int ntrPerCell, TGeoNavigator* nav)
 {
   /// populate cell with info extracted from TGeometry, using ntrPerCell test tracks per cell
-
-  float zmn = getZBinMin(iz), phmn = getPhiBinMin(ip), sn, cs, rMin = getRMin(), rMax = getRMax();
-  double meanRho = 0., meanX2X0 = 0., lgt = 0.;
-  ;
-  float dz = getDZ() / ntrPerCell;
-  for (int isz = ntrPerCell; isz--;) {
-    float zs = zmn + (isz + 0.5) * dz;
-    float dzt = zs > 0.f ? 0.25 * dz : -0.25 * dz; // to avoid 90 degree polar angle
-    for (int isp = ntrPerCell; isp--;) {
-      o2::math_utils::sincos(phmn + (isp + 0.5) * getDPhi() / ntrPerCell, sn, cs);
-      auto bud = o2::base::GeometryManager::meanMaterialBudget(rMin * cs, rMin * sn, zs - dzt, rMax * cs, rMax * sn, zs + dzt);
-      if (bud.length > 0.) {
-        meanRho += bud.length * bud.meanRho;
-        meanX2X0 += bud.meanX2X0; // we store actually not X2X0 but 1./X0
-        lgt += bud.length;
-      }
-    }
-  }
-  if (lgt > 0.) {
-    auto& cell = mCells[getCellIDPhiBin(ip, iz)];
-    cell.meanRho = meanRho / lgt;   // mean rho
-    cell.meanX2X0 = meanX2X0 / lgt; // mean 1./X0 seen in this cell
-  }
-}
-//_______________________________________________________________________________
-//________________________________________________________________________________
-void MatLayerCyl::parallelPopulateFromTGeo(int ntrPerCell, int nThreads)
-{
-  /// populate layer with info extracted from TGeometry, using ntrPerCell test tracks per cell
-  assert(mConstructionMask != Constructed);
-  mConstructionMask = InProgress;
-  ntrPerCell = ntrPerCell > 1 ? ntrPerCell : 1;
-
-  if (nThreads <= 1) {
-    TGeoNavigator* nav = gGeoManager->GetCurrentNavigator(); // get the default navigator, used in the singlethreaded case
-    for (int iz = getNZBins(); iz--;) {
-      for (int ip = getNPhiBins(); ip--;) {
-        parallelPopulateFromTGeo(ip, iz, ntrPerCell, nav);
-      }
-    }
-    return;
-  }
-
-  /// set the amount of querried max threads in the geoManager, enables thread safety
-  gGeoManager->SetMaxThreads(nThreads);
-
-  std::vector<std::thread> threads;
-  threads.reserve(nThreads);
-  int totalZ = getNZBins();
-  int totalPhi = getNPhiBins();
-  int totalTasks = totalZ * totalPhi;
-
-  for (int t = 0; t < nThreads; ++t) {
-    // create each thread with a lambda, that assigns him a portion of the cells to handle
-    threads.emplace_back([this, t, nThreads, totalTasks, totalPhi, ntrPerCell]() {
-      auto* nav = gGeoManager->AddNavigator();
-
-      for (int i = t; i < totalTasks; i += nThreads) {
-        int iz = i / totalPhi;
-        int ip = i % totalPhi;
-        this->parallelPopulateFromTGeo(ip, iz, ntrPerCell, nav);
-      }
-    });
-  }
-  for (auto& th : threads) {
-    if (th.joinable()) {
-      th.join();
-    }
-  }
-}
-
-//________________________________________________________________________________
-void MatLayerCyl::parallelPopulateFromTGeo(int ip, int iz, int ntrPerCell, TGeoNavigator* nav)
-{
-  /// populate cell with info extracted from TGeometry, using ntrPerCell test tracks per cell
-
-  /// get the current navigator. If we are excecuting singlethreaded nav is null so we set curr to the default navigator
-  // TGeoNavigator* curr = nav ? nav : gGeoManager->GetCurrentNavigator();
 
   float zmn = getZBinMin(iz), phmn = getPhiBinMin(ip), sn, cs, rMin = getRMin(), rMax = getRMax();
   double meanRho = 0., meanX2X0 = 0., lgt = 0.;
@@ -217,7 +141,7 @@ void MatLayerCyl::parallelPopulateFromTGeo(int ip, int iz, int ntrPerCell, TGeoN
     float dzt = zs > 0.f ? 0.25 * dz : -0.25 * dz; // to avoid 90 degree polar angle
     for (int isp = ntrPerCell; isp--;) {
       o2::math_utils::sincos(phmn + (isp + 0.5) * getDPhi() / ntrPerCell, sn, cs);
-      auto bud = o2::base::GeometryManager::parallelMeanMaterialBudget(rMin * cs, rMin * sn, zs - dzt, rMax * cs, rMax * sn, zs + dzt, nav);
+      auto bud = o2::base::GeometryManager::meanMaterialBudget(rMin * cs, rMin * sn, zs - dzt, rMax * cs, rMax * sn, zs + dzt, nav);
       if (bud.length > 0.) {
         meanRho += bud.length * bud.meanRho;
         meanX2X0 += bud.meanX2X0; // we store actually not X2X0 but 1./X0

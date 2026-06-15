@@ -14,11 +14,19 @@
 #include "DetectorsBase/MatLayerCylSet.h"
 #include "CommonConstants/MathConstants.h"
 #include <thread>
+#include <vector>
+#include <algorithm>
+#include <tbb/global_control.h>
+#include <tbb/parallel_for.h>
+#include "TGeoManager.h"
+#include <tbb/blocked_range.h>
+#include <tbb/enumerable_thread_specific.h>
+#include <tbb/partitioner.h>
 #ifndef GPUCA_ALIGPUCODE // this part is unvisible on GPU version
 #include "GPUCommonLogger.h"
 #include <TFile.h>
 #include "CommonUtils/TreeStreamRedirector.h"
-//#define _DBG_LOC_ // for local debugging only
+// #define _DBG_LOC_ // for local debugging only
 
 #endif // !GPUCA_ALIGPUCODE
 #undef NDEBUG
@@ -68,7 +76,6 @@ void MatLayerCylSet::addLayer(float rmin, float rmax, float zmax, float dz, floa
   get()->mRMax2 = get()->mRMax * get()->mRMax;
 }
 
-//________________________________________________________________________________
 void MatLayerCylSet::populateFromTGeo(int ntrPerCell)
 {
   ///< populate layers, using ntrPerCell test tracks per cell
@@ -83,40 +90,62 @@ void MatLayerCylSet::populateFromTGeo(int ntrPerCell)
     LOG(error) << "The LUT is already populated";
     return;
   }
-  for (int i = 0; i < nlr; i++) {
-    printf("Populating with %d trials Lr  %3d ", ntrPerCell, i);
-    get()->mLayers[i].print();
-    get()->mLayers[i].populateFromTGeo(ntrPerCell);
-  }
-  finalizeStructures();
-}
-//_______________________________________________________________________________
-
-void MatLayerCylSet::parallelPopulateFromTGeo(int ntrPerCell)
-{
-   ///< populate layers, using ntrPerCell test tracks per cell
-  assert(mConstructionMask == InProgress);
-
-  int nlr = getNLayers();
-  if (!nlr) {
-    LOG(error) << "The LUT is not yet initialized";
-    return;
-  }
-  if (get()->mR2Intervals) {
-    LOG(error) << "The LUT is already populated";
-    return;
-  }
-  int nThreads = static_cast<int>(std::thread::hardware_concurrency());
+  // Find out our maximal number of allowed threads provided by user, default to single threaded
+  int nThreads = 1;
   auto nthreads_env = getenv("NTHREADS_MATBUD");
   if (nthreads_env) {
     nThreads = atoi(nthreads_env);
   }
-     
-  for (int i = 0; i < nlr; i++) {
-    printf("Populating with %d trials Lr  %3d ", ntrPerCell, i);
-    get()->mLayers[i].print();
-    get()->mLayers[i].parallelPopulateFromTGeo(ntrPerCell, nThreads);
+  /// call existing sequential method for maxThreads == 1
+  if (nThreads <= 1) {
+    for (int i = 0; i < nlr; i++) {
+      printf("Populating with %d trials Lr %3d ", ntrPerCell, i);
+      get()->mLayers[i].print();
+      get()->mLayers[i].populateFromTGeo(ntrPerCell);
+    }
+    finalizeStructures();
+    return;
   }
+
+  /// setup layer offsets for the parallel population, so that threads can work on different layers without conflicts
+  /// O(1) lookup array does not offer performance gains, vector setup is to expensive and binary search on vector of max length ~ 300 is fast enough
+  std::vector<size_t> layerOffsets(nlr + 1, 0);
+  /// get layer offsets and total number of jobs
+  long totalCells = 0;
+  for (int i = 0; i < nlr; i++) {
+    printf("Queuing tasks with %d trials Lr  %3d ", ntrPerCell, i);
+    get()->mLayers[i].print();
+    size_t cellsInLayer = get()->mLayers[i].getNZBins() * get()->mLayers[i].getNPhiBins();
+    totalCells += cellsInLayer;
+    layerOffsets[i + 1] = layerOffsets[i] + cellsInLayer;
+  }
+
+  /// setup TBB thread limits and navigator storage
+  tbb::global_control threadControl(tbb::global_control::max_allowed_parallelism, nThreads);
+  gGeoManager->SetMaxThreads(nThreads);
+  tbb::enumerable_thread_specific<TGeoNavigator*> threadNavigators([]() {
+    return gGeoManager->AddNavigator();
+  });
+
+  /// Process flat logical range, mapping index sequentially back to coordinates
+  tbb::parallel_for(tbb::blocked_range<size_t>(0, totalCells), [this, ntrPerCell, &layerOffsets, &threadNavigators](const tbb::blocked_range<size_t>& r) {
+    TGeoNavigator* nav = threadNavigators.local();
+
+    for (size_t idx = r.begin(); idx != r.end(); ++idx) {
+      /// Fast lookup of the layer index using standard binary search
+      auto it = std::upper_bound(layerOffsets.begin(), layerOffsets.end(), idx);
+      int layerIdx = std::distance(layerOffsets.begin(), it) - 1;
+      /// Calculate the relative coordinate within that layer
+      size_t cellInLayer = idx - layerOffsets[layerIdx];
+      int nphi = this->get()->mLayers[layerIdx].getNPhiBins();
+
+      int iz = cellInLayer / nphi;
+      int ip = cellInLayer % nphi;
+
+      this->get()->mLayers[layerIdx].populateFromTGeo(ip, iz, ntrPerCell, nav);
+    }
+  });
+
   finalizeStructures();
 }
 
