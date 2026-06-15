@@ -399,7 +399,10 @@ GeometryManager::MatBudgetExt GeometryManager::meanMaterialBudgetExt(float x0, f
 
 //_____________________________________________________________________________________
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 803e6264dc (Clean up parallel TBB implementation, remove redundant code)
 o2::base::MatBudget GeometryManager::meanMaterialBudget(float x0, float y0, float z0, float x1, float y1, float z1, TGeoNavigator* nav)
 {
   //
@@ -416,7 +419,9 @@ o2::base::MatBudget GeometryManager::meanMaterialBudget(float x0, float y0, floa
   //
   //  Ported to O2: ruben.shahoyan@cern.ch
   //
-  //  Changes to support multithreaded excecution: Tristan Wenzel 
+<<<<<<< HEAD
+  //  Changes to support multithreaded excecution: Tristan Wenzel
+>>>>>>> 803e6264dc (Clean up parallel TBB implementation, remove redundant code)
 
   // if we receive a function call without specified navigator assign the default one
   if (nav == nullptr) {
