@@ -419,9 +419,8 @@ o2::base::MatBudget GeometryManager::meanMaterialBudget(float x0, float y0, floa
   //
   //  Ported to O2: ruben.shahoyan@cern.ch
   //
-<<<<<<< HEAD
   //  Changes to support multithreaded excecution: Tristan Wenzel
->>>>>>> 803e6264dc (Clean up parallel TBB implementation, remove redundant code)
+
 
   // if we receive a function call without specified navigator assign the default one
   if (nav == nullptr) {
