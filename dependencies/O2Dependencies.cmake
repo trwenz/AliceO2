@@ -309,5 +309,7 @@ if(GBL_FOUND AND NOT TARGET GBL::GBL)
     )
     target_link_options(GBL::GBL INTERFACE ${GBL_LINK_OPTIONS})
 endif()
+find_package(VecGeom CONFIG) 
 
 feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)
+

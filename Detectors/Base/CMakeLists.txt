@@ -31,6 +31,9 @@ o2_add_library(DetectorsBase
                        src/GlobalParams.cxx
                        src/O2Tessellated.cxx
                        src/TGeoGeometryUtils.cxx
+                       src/vecgeom/RootGeoManager.cpp
+                       src/vecgeom/PlacedRootVolume.cpp
+                       src/vecgeom/UnplacedRootVolume.cpp
                PUBLIC_LINK_LIBRARIES FairRoot::Base
                                      O2::CommonUtils
                                      O2::DetectorsCommonDataFormats
@@ -49,6 +52,7 @@ o2_add_library(DetectorsBase
                                      MC::VMC
                                      TBB::tbb
                                      ROOT::Gdml
+				     VecGeom::vecgeom
                              )
 
 o2_target_root_dictionary(DetectorsBase

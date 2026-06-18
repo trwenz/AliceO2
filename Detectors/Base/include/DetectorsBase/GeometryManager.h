@@ -27,6 +27,7 @@
 #include "MathUtils/Cartesian.h"
 #include "DetectorsBase/MatCell.h"
 #include <mutex>
+
 class TGeoHMatrix; // lines 11-11
 class TGeoManager; // lines 9-9
 class TGeoNavigator;
@@ -114,6 +115,8 @@ class GeometryManager : public TObject
   {
     return meanMaterialBudgetExt(start.X(), start.Y(), start.Z(), end.X(), end.Y(), end.Z());
   }
+
+  static o2::base::MatBudget vecGeomMaterialBudget(float x0, float y0, float z0, float x1, float y1, float z1);
 
  private:
   /// Default constructor

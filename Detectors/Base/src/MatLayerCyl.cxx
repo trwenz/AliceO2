@@ -126,7 +126,6 @@ void MatLayerCyl::populateFromTGeo(int ntrPerCell)
   }
 }
 
-
 //________________________________________________________________________________
 void MatLayerCyl::populateFromTGeo(int ip, int iz, int ntrPerCell, TGeoNavigator* nav)
 {
@@ -141,7 +140,17 @@ void MatLayerCyl::populateFromTGeo(int ip, int iz, int ntrPerCell, TGeoNavigator
     float dzt = zs > 0.f ? 0.25 * dz : -0.25 * dz; // to avoid 90 degree polar angle
     for (int isp = ntrPerCell; isp--;) {
       o2::math_utils::sincos(phmn + (isp + 0.5) * getDPhi() / ntrPerCell, sn, cs);
-      auto bud = o2::base::GeometryManager::meanMaterialBudget(rMin * cs, rMin * sn, zs - dzt, rMax * cs, rMax * sn, zs + dzt, nav);
+      // auto bud = o2::base::GeometryManager::meanMaterialBudget(rMin * cs, rMin * sn, zs - dzt, rMax * cs, rMax * sn, zs + dzt, nav);
+
+      auto bud = o2::base::GeometryManager::vecGeomMaterialBudget(rMin * cs, rMin * sn, zs - dzt, rMax * cs, rMax * sn, zs + dzt);
+
+      // LOG(info) << " TGeo bud " << bud.length << " VecGeom bud " << bud_vecgeom.length;
+      // LOG(info) << " TGeo bud " << bud.meanRho << " VecGeom bud " << bud_vecgeom.meanRho;
+      /*if (std::abs(bud.length - bud_vecgeom.length) > 1E-8) {
+        LOG(info) << " TGeo bud length " << bud.length << " VecGeom bud length" << bud_vecgeom.length;
+        LOG(info) << " TGeo bud rho " << bud.meanRho << " VecGeom rho " << bud_vecgeom.meanRho;
+      }*/
+
       if (bud.length > 0.) {
         meanRho += bud.length * bud.meanRho;
         meanX2X0 += bud.meanX2X0; // we store actually not X2X0 but 1./X0

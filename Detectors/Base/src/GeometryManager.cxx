@@ -29,8 +29,29 @@
 #include "CommonUtils/NameConf.h"
 #include "DetectorsBase/Aligner.h"
 
+#include <VecGeom/management/GeoManager.h>
+#include "DetectorsBase/vecgeom/RootGeoManager.h"
+
+#include "VecGeom/navigation/VNavigator.h"
+#include "VecGeom/navigation/GlobalLocator.h"
+#include "VecGeom/navigation/NewSimpleNavigator.h"
+#include "VecGeom/navigation/SimpleABBoxNavigator.h"
+#include "VecGeom/navigation/HybridNavigator2.h"
+#include "VecGeom/navigation/BVHNavigator.h"
+#include "VecGeom/navigation/SimpleLevelLocator.h"
+#include "VecGeom/navigation/SimpleABBoxLevelLocator.h"
+#include "VecGeom/navigation/HybridLevelLocator.h"
+#include "VecGeom/navigation/BVHLevelLocator.h"
+#include "VecGeom/navigation/NavigationState.h"
+#include "VecGeom/management/ABBoxManager.h"
+#include "VecGeom/management/BVHManager.h"
+#include "VecGeom/volumes/LogicalVolume.h"
+#include <cstdlib>
+#include "VecGeom/management/ABBoxManager.h"
+
 using namespace o2::detectors;
 using namespace o2::base;
+using Vector3D = vecgeom::Vector3D<Precision>;
 
 /// Implementation of GeometryManager, the geometry manager class which interfaces to TGeo and
 /// the look-up table mapping unique volume indices to symbolic volume names. For that, it
@@ -399,10 +420,6 @@ GeometryManager::MatBudgetExt GeometryManager::meanMaterialBudgetExt(float x0, f
 
 //_____________________________________________________________________________________
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 803e6264dc (Clean up parallel TBB implementation, remove redundant code)
 o2::base::MatBudget GeometryManager::meanMaterialBudget(float x0, float y0, float z0, float x1, float y1, float z1, TGeoNavigator* nav)
 {
   //
@@ -419,9 +436,7 @@ o2::base::MatBudget GeometryManager::meanMaterialBudget(float x0, float y0, floa
   //
   //  Ported to O2: ruben.shahoyan@cern.ch
   //
-<<<<<<< HEAD
   //  Changes to support multithreaded excecution: Tristan Wenzel
->>>>>>> 803e6264dc (Clean up parallel TBB implementation, remove redundant code)
 
   // if we receive a function call without specified navigator assign the default one
   if (nav == nullptr) {
@@ -546,4 +561,150 @@ void GeometryManager::loadGeometry(std::string_view simPrefix, bool applyMisalig
     loadGeom(o2::base::NameConf::getGeomFileName(simPrefix));
     applyMisalignent(applyMisalignment);
   }
+
+  // Select the VecGeom navigation strategy. For each logical volume we set BOTH a
+  // navigator (used for ComputeStep) and a level locator (used for point relocation
+  // after a boundary crossing, via GlobalLocator). Previously only the navigator was
+  // set, so relocation always fell back to the brute-force SimpleLevelLocator -- which
+  // dominated the profile. Navigator and locator are chosen as matched pairs so they
+  // share the same acceleration structure.
+  //
+  // Two strategies, selectable at runtime (no rebuild) via O2_VECGEOM_USE_BVH so the
+  // tiered vs. BVH approaches can be benchmarked on the same geometry:
+  //  - tiered: per-volume choice by daughter count (Simple / ABBox / Hybrid)
+  //  - BVH:    bounding-volume hierarchy everywhere except trivially small volumes
+  const bool useBVH = std::getenv("O2_VECGEOM_USE_BVH") != nullptr;
+
+  auto InitNavigators = [useBVH]() {
+    // Acceleration structures must be built before the navigators/locators reference them.
+    vecgeom::ABBoxManager::Instance().InitABBoxesForCompleteGeometry();
+    if (useBVH) {
+      // Builds a BVH per logical volume from the ABBoxes computed above.
+      vecgeom::BVHManager::Init();
+    }
+
+    for (auto& lvol : vecgeom::GeoManager::Instance().GetLogicalVolumesMap()) {
+      auto* vol = lvol.second;
+      const auto ndaughters = vol->GetDaughtersp()->size();
+
+      if (ndaughters <= 2) {
+        // Too few daughters to benefit from an acceleration structure: brute force is cheaper.
+        vol->SetNavigator(vecgeom::NewSimpleNavigator<>::Instance());
+        vol->SetLevelLocator(vecgeom::SimpleLevelLocator::GetInstance());
+      } else if (useBVH) {
+        vol->SetNavigator(vecgeom::BVHNavigator<>::Instance());
+        vol->SetLevelLocator(vecgeom::BVHLevelLocator::GetInstance());
+      } else if (ndaughters <= 10) {
+        vol->SetNavigator(vecgeom::SimpleABBoxNavigator<>::Instance());
+        vol->SetLevelLocator(vecgeom::SimpleABBoxLevelLocator::GetInstance());
+      } else { // ndaughters > 10
+        vol->SetNavigator(vecgeom::HybridNavigator<>::Instance());
+        vol->SetLevelLocator(vecgeom::THybridLevelLocator<>::GetInstance());
+        vecgeom::HybridManager2::Instance().InitStructure(vol);
+      }
+    }
+  };
+
+  if (gGeoManager) {
+    // translation of geometry and material pointers, initialize navigators
+    vecgeom::RootGeoManager::Instance().SetMaterialConversionHook([](TGeoMaterial const* m) { return (void*)m; });
+    vecgeom::RootGeoManager::Instance().SetFlattenAssemblies(true);
+    vecgeom::RootGeoManager::Instance().LoadRootGeometry();
+    InitNavigators();
+  }
+}
+
+o2::base::MatBudget GeometryManager::vecGeomMaterialBudget(float x0, float y0, float z0, float x1, float y1, float z1)
+{
+  double length, start[3] = {x0, y0, z0};
+  double dir[3] = {x1 - x0, y1 - y0, z1 - z0};
+  if ((length = dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]) < TGeoShape::Tolerance() * TGeoShape::Tolerance()) {
+    return o2::base::MatBudget(); // return empty struct
+  }
+  // compute length to use as termination criterion for stepping
+  length = std::sqrt(length);
+  /// normalize direction vector
+  double invlen = 1. / length;
+  for (int i = 3; i--;) {
+    dir[i] *= invlen;
+  }
+
+  thread_local static vecgeom::NavigationState* newnavstate = vecgeom::NavigationState::MakeInstance(vecgeom::GeoManager::Instance().getMaxDepth());
+  thread_local static vecgeom::NavigationState* currnavstate = vecgeom::NavigationState::MakeInstance(vecgeom::GeoManager::Instance().getMaxDepth());
+  thread_local static vecgeom::NavigationState* startCache = vecgeom::NavigationState::MakeInstance(vecgeom::GeoManager::Instance().getMaxDepth());
+  thread_local static bool startCacheValid = false;
+
+  /// initialize vecgeom vectors for calls to vecgeom functions
+  Vector3D currPoint(x0, y0, z0);
+  Vector3D dirr(dir[0], dir[1], dir[2]);
+
+  // get world
+  auto world = vecgeom::GeoManager::Instance().GetWorld();
+  o2::base::MatBudget budTot, budStep;
+  budStep.length = length;
+
+  /// find and initialize the starting volume
+  /// try to locate starting volume by reusing path from before, if no valid path exists clear the state and find it yourself
+  if (startCacheValid && !startCache->IsOutside()) {
+    startCache->CopyTo(currnavstate);
+    vecgeom::Transformation3D m;
+    currnavstate->TopMatrix(m);
+    vecgeom::GlobalLocator::RelocatePointFromPath(m.Transform(currPoint), *currnavstate);
+  } else {
+    currnavstate->Clear();
+    vecgeom::GlobalLocator::LocateGlobalPoint(world, currPoint, *currnavstate, true);
+  }
+  // check validity of starting volume
+  if (currnavstate->IsOutside() || currnavstate->Top() == nullptr) {
+    LOG(info) << "start point outside of geometry\n";
+    // return empty struct and invalidate cachestart
+    startCacheValid = false;
+    return o2::base::MatBudget();
+  }
+  // store non corrupted path to startCache validate boolean flag
+  currnavstate->CopyTo(startCache);
+  startCacheValid = true;
+
+  double stepTot = 0.;
+  double remainingDist = length;
+  /// step to the next volume as long as the remaining distance is larger than the defined tolerance
+  /// ask the boss about tolerance
+  Int_t nzero = 0;
+  while (remainingDist > 1.E-10) {
+    /// get volume we currently look at
+    auto* lvol = currnavstate->Top()->GetLogicalVolume();
+    accountMaterial(static_cast<TGeoMaterial*>(lvol->GetMaterialPtr()), budStep);
+    vecgeom::VNavigator const* navigator = lvol->GetNavigator();
+    /// compute step to next material, update remaining distance and current point and matBudget properties
+    double step = static_cast<double>(navigator->ComputeStepAndPropagatedState(currPoint, dirr, remainingDist, *currnavstate, *newnavstate));
+    // check if we are potentially stuck
+    if (step < 2.E-10) {
+      nzero++;
+    } else {
+      nzero = 0;
+    }
+    if (nzero > 3) {
+      // encountered problem trying to cross a boundary, return budget up until now
+      LOG(info) << "Not possible to cross Boundary at" << currPoint[0] << ", " << currPoint[1] << ", " << currPoint[2];
+      budTot.meanRho /= stepTot;
+      budTot.length = stepTot;
+      return o2::base::MatBudget(budTot);
+    }
+
+    remainingDist -= step;
+    stepTot += step;
+    budTot.meanRho += step * budStep.meanRho;
+    budTot.meanX2X0 += step / budStep.meanX2X0;
+    // advance our current location
+    currPoint = currPoint + step * dirr;
+    /// swap states, curr state should point to our current propagation state, we don't care what newstate references so we can just give it the old value
+    std::swap(currnavstate, newnavstate);
+  }
+  budTot.meanRho /= stepTot;
+  budTot.length = stepTot;
+
+  // delete currnavstate;
+  // delete newnavstate;
+
+  return o2::base::MatBudget(budTot);
 }
