@@ -21,12 +21,10 @@
 #include <TFile.h>
 #include <TSystem.h>
 #include <TStopwatch.h>
+
 #endif
 
-<<<<<<< HEAD
->>>>>>> 803e6264dc (Clean up parallel TBB implementation, remove redundant code)
 o2::base::MatLayerCylSet mbLUT;
-
 bool testMBLUT(const std::string& lutFile = "matbud.root");
 bool buildMatBudLUT(int nTst, int maxLr, const std::string& outFile, const std::string& geomNamePrefix, const std::string& opts);
 bool buildMatBudLUT(int nTst = 60, int maxLr = 20, const std::string& outFile = "matbud.root", const std::string& geomName = "o2sim")
@@ -58,6 +56,7 @@ bool buildMatBudLUT(int nTst, int maxLr, const std::string& outFile, const std::
     gSystem->Exec(str.str().c_str());
   }
   o2::base::GeometryManager::loadGeometry(geomNamePrefix);
+
   configLayers();
 
   if (maxLr < 1) {
@@ -72,6 +71,7 @@ bool buildMatBudLUT(int nTst, int maxLr, const std::string& outFile, const std::
   }
 
   TStopwatch sw;
+
   mbLUT.populateFromTGeo(nTst);
   mbLUT.optimizePhiSlices(); // move to populateFromTGeo
   mbLUT.flatten();           // move to populateFromTGeo
